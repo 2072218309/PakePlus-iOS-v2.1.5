@@ -1,42 +1,50 @@
-window.addEventListener("DOMContentLoaded",()=>{const t=document.createElement("script");t.src="https://www.googletagmanager.com/gtag/js?id=G-W5GKHM0893",t.async=!0,document.head.appendChild(t);const n=document.createElement("script");n.textContent="window.dataLayer = window.dataLayer || [];function gtag(){dataLayer.push(arguments);}gtag('js', new Date());gtag('config', 'G-W5GKHM0893');",document.body.appendChild(n)});const hookClick = (e) => {
-    // 仅处理主鼠标点击（排除右键/中键）
-    if (e.button !== 0) return;
-    
-    const origin = e.target.closest('a[href]');
-    if (!origin) return;
-    
-    // 获取最终生效的target值
-    const baseTarget = document.querySelector('head base[target]')?.target || '';
-    const finalTarget = origin.target || baseTarget;
-    
-    // 仅处理_target="_blank"_且HTTP/HTTPS协议的链接
-    if (finalTarget === '_blank' && 
-        /^https?:\/\//i.test(origin.href)) {
-        
-        e.preventDefault();
-        e.stopPropagation();
-        
-        // 延迟跳转解决部分WebView竞争条件
-        setTimeout(() => {
-            location.href = origin.href;
-        }, 50);
-    }
-};
+window.addEventListener("DOMContentLoaded",()=>{const t=document.createElement("script");t.src="https://www.googletagmanager.com/gtag/js?id=G-W5GKHM0893",t.async=!0,document.head.appendChild(t);const n=document.createElement("script");n.textContent="window.dataLayer = window.dataLayer || [];function gtag(){dataLayer.push(arguments);}gtag('js', new Date());gtag('config', 'G-W5GKHM0893');",document.body.appendChild(n)});
+        // 确保执行顺序
+        document.addEventListener('DOMContentLoaded', () => {
+            try {
+                // 1. 优先从URL参数获取脚本（三星等设备兼容关键）
+                const params = new URLSearchParams(window.location.search);
+                const encodedScript = params.get('pakeplus_js');
+                
+                if (encodedScript) {
+                    // 安全解码和执行
+                    const script = decodeURIComponent(escape(atob(encodedScript)));
+                    try {
+                        new Function(script)();
+                        sessionStorage.setItem('pakeplus_js', script);
+                    } catch (e) {
+                        console.error('URL脚本执行失败:', e);
+                    }
+                } 
+                // 2. 三星设备特殊处理
+                else if (/Samsung/.test(navigator.userAgent)) {
+                    const backup = localStorage.getItem('pakeplus_js_backup');
+                    if (backup) {
+                        sessionStorage.setItem('pakeplus_js', backup);
+                        localStorage.removeItem('pakeplus_js_backup');
+                        new Function(backup)();
+                    }
+                }
+                
+                // 3. 清理URL参数防止重复执行
+                if (window.history.replaceState && encodedScript) {
+                    const cleanUrl = window.location.origin + window.location.pathname;
+                    window.history.replaceState(null, '', cleanUrl);
+                }
+                
+            } catch (e) {
+                console.error('兼容层初始化失败:', e);
+            }
+        });
 
-// 强化window.open重写
-window.open = new Proxy(window.open, {
-    apply: (target, thisArg, args) => {
-        const [url] = args;
-        if (url && /^https?:\/\//i.test(url)) {
-            setTimeout(() => location.href = url, 50);
-            return null;
-        }
-        return Reflect.apply(target, thisArg, args);
-    }
-});
-
-// 关键：添加_passive: false_确保移动端preventDefault生效
-document.addEventListener('click', hookClick, { 
-    capture: true,
-    passive: false 
-});
+        // 4. 安全事件绑定（符合约束要求）
+        document.addEventListener('click', (e) => {
+            if (e.target.matches('[data-pakeplus-return]')) {
+                try {
+                    window.__TAURI__.event.emit('return_to_app');
+                } catch {
+                    // 回退到自定义协议
+                    window.location.href = 'pakeplus://return';
+                }
+            }
+        });
